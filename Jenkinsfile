@@ -2,10 +2,10 @@ pipeline {
   agent any
 
   environment {
-    MAVEN_TOOL    = 'Maven3'                // ensure this name exists in Jenkins Global Tool Config
+    MAVEN_TOOL    = 'Maven3'
     REMOTE_USER   = 'jenkins-deploy'
-    REMOTE_HOST   = 'vm2_ip'                 // <-- REPLACE with your Tomcat VM IP or hostname
-    SSH_CRED      = 'jenkins-deploy-ssh'     // credential ID in Jenkins (private key)
+    REMOTE_HOST   = '192.168.122.2'
+    SSH_CRED      = 'jenkins-deploy-ssh'
     REMOTE_TMP    = '/tmp'
     DEPLOY_SCRIPT = '/usr/local/bin/deploy_war.sh'
     WAR_GLOB      = 'target/*.war'
@@ -39,7 +39,6 @@ pipeline {
 
     stage('Deploy (secure)') {
       steps {
-        // uses the SSH credential you added to Jenkins
         sshagent (credentials: ["${SSH_CRED}"]) {
           sh '''
             set -euo pipefail
@@ -57,7 +56,9 @@ pipeline {
           retry(3) {
             sleep 5
             def code = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://${REMOTE_HOST}:8080/", returnStdout: true).trim()
-            if (code != '200') { error("Smoke test failed: HTTP ${code}") }
+            if (code != '200') {
+              error("Smoke test failed: HTTP ${code}")
+            }
             echo "Smoke test OK: HTTP ${code}"
           }
         }
@@ -69,17 +70,18 @@ pipeline {
       steps {
         sshagent (credentials: ["${SSH_CRED}"]) {
           sh '''
-            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "sudo /usr/local/bin/rollback_latest_tomcat.sh || echo 'rollback failed/none found'"
+            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} \
+            "sudo /usr/local/bin/rollback_latest_tomcat.sh || echo 'rollback failed/none found'"
           '''
         }
       }
     }
 
-  } // stages
+  }
 
   post {
     success { echo "Deployment succeeded: ${env.BUILD_URL}" }
-    failure { echo "Pipeline failed — check console output & Tomcat logs." }
+    failure { echo "Pipeline failed — check logs and Tomcat output." }
     always { cleanWs() }
   }
 }
