@@ -26,7 +26,10 @@ pipeline {
     stage('Build') {
       tools { maven "${env.MAVEN_TOOL}" }
       steps {
-        sh 'mvn -B -DskipTests=false clean package'
+        sh '''
+          set -euo pipefail
+          mvn -B -DskipTests=false clean package
+        '''
         archiveArtifacts artifacts: "${WAR_GLOB}", fingerprint: true
       }
     }
@@ -45,6 +48,18 @@ pipeline {
             NEWWAR=app_${BUILD_NUMBER}.war
             scp -o StrictHostKeyChecking=no ${WAR_GLOB} ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_TMP}/${NEWWAR}
             ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "sudo ${DEPLOY_SCRIPT} ${REMOTE_TMP}/${NEWWAR}"
+          '''
+        }
+      }
+    }
+
+    stage('Collect Tomcat Status & Logs') {
+      steps {
+        sshagent (credentials: ["${SSH_CRED}"]) {
+          sh '''
+            set -euo pipefail
+            echo "=== REMOTE: Tomcat status & last logs ==="
+            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "sudo /usr/local/bin/check_tomcat.sh" || true
           '''
         }
       }
